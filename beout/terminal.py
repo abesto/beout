@@ -6,6 +6,7 @@ from datetime import datetime
 import time
 from functools import partial
 import threading
+import logging
 
 from termcolor import colored, COLORS
 import humanize
@@ -43,16 +44,21 @@ class NewLineManager(WithContext):
     def __init__(self):
         super(NewLineManager, self).__init__()
         self._are_we_on_new_line = True
+        self._line = ''
+        self._logger = logging.getLogger('beout')
 
     def write(self, s):
         if len(s) > 0:
             self.context.fd.write(s)
             self._are_we_on_new_line = False
+            self._line += s
 
     def new_line(self):
         if not self._are_we_on_new_line:
             self.context.fd.write('\n')
             self._are_we_on_new_line = True
+            self._logger.info(strip_ansi(self._line))
+            self._line = ''
 
 
 class TerminalWriterConfig(object):
