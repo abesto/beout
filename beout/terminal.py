@@ -21,26 +21,38 @@ def strip_ansi(text):
     return ansi_escape.sub('', text)
 
 
-class NewLineManager(object):
+class Context(object):
+    def __init__(self):
+        self.fd = None
+        self.out = None
+
+
+class WithContext(object):
+    def __init__(self):
+        self.context = None
+
+    def with_context(self, context):
+        self.context = context
+        return self
+
+
+class NewLineManager(WithContext):
     """
     Wrap a file descriptor, manage writing exactly one \n between lines
     """
-    def __init__(self, fd):
-        self.fd = fd
+    def __init__(self):
+        super(NewLineManager, self).__init__()
         self._are_we_on_new_line = True
 
     def write(self, s):
         if len(s) > 0:
-            self.fd.write(s)
+            self.context.fd.write(s)
             self._are_we_on_new_line = False
 
     def new_line(self):
         if not self._are_we_on_new_line:
-            self.fd.write('\n')
+            self.context.fd.write('\n')
             self._are_we_on_new_line = True
-
-
-out = NewLineManager(sys.stdout)
 
 
 class TerminalWriterConfig(object):
@@ -91,7 +103,7 @@ class Substeps(object):
         self.steps = -1
 
 
-class DotterThread(threading.Thread):
+class DotterThread(threading.Thread, WithContext):
     """
     A stoppable thread that outputs dots every N seconds.
     Used to indicate progress in short, but not immediately finishing tasks.
@@ -105,14 +117,14 @@ class DotterThread(threading.Thread):
 
     def run(self):
         while not self._stop.is_set():
-            out.write(self._style('.'))
+            self.context.out.write(self._style('.'))
             time.sleep(self._interval_seconds)
 
     def stop(self):
         self._stop.set()
 
 
-class Dotter(object):
+class Dotter(WithContext):
     """
     Manage DotterThreads
     """
@@ -125,7 +137,7 @@ class Dotter(object):
 
     def start(self, interval_seconds):
         self.reset()
-        self.thread = DotterThread(interval_seconds, self.config.progress_dot_style)
+        self.thread = DotterThread(interval_seconds, self.config.progress_dot_style).with_context(self.context)
         self.thread.start()
 
     def reset(self):
@@ -134,7 +146,7 @@ class Dotter(object):
             self.thread = None
 
 
-class EtaThread(threading.Thread):
+class EtaThread(threading.Thread, WithContext):
     """
     A stoppable thread that updates an ETA at the end of the line, and writes the elapsed time once the task is done.
     Used to indicate progress in long-running tasks.
@@ -150,9 +162,9 @@ class EtaThread(threading.Thread):
         self.setDaemon(True)
 
     def _write(self, suffix):
-        out.write('\r' + ' ' * len(strip_ansi(self._last_printed)) + '\r')
+        self.context.out.write('\r' + ' ' * len(strip_ansi(self._last_printed)) + '\r')
         self._last_printed = self._line + ' ' + suffix
-        out.write(self._last_printed)
+        self.context.out.write(self._last_printed)
 
     def run(self):
         while not self._stop.is_set():
@@ -166,7 +178,7 @@ class EtaThread(threading.Thread):
         self._write(self._style('(Finished in ' + humanize.naturaldelta(self._elapsed) + ')'))
 
 
-class Eta(object):
+class Eta(WithContext):
     """
     Manage EtaThreads
     """
@@ -176,7 +188,7 @@ class Eta(object):
 
     def start(self, line, seconds):
         self.reset()
-        self.thread = EtaThread(line, seconds, self.config.eta_style)
+        self.thread = EtaThread(line, seconds, self.config.eta_style).with_context(self.context)
         self.thread.start()
 
     def reset(self):
@@ -190,16 +202,21 @@ class TerminalWriter(object):
     The public API
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, fd=sys.stdout):
         """
         :type config: TerminalWriterConfig
         """
         if config is None:
             config = TerminalWriterConfig
+
+        self._context = Context()
+        self._context.fd = fd
+        self._context.out = NewLineManager().with_context(self._context)
+
         self._config = config
         self._substeps = Substeps(config)
-        self._dotter = Dotter(config)
-        self._eta = Eta(config)
+        self._dotter = Dotter(config).with_context(self._context)
+        self._eta = Eta(config).with_context(self._context)
 
     def box(self, text):
         self._substeps.reset()
@@ -207,8 +224,8 @@ class TerminalWriter(object):
         self._eta.reset()
         stripped = strip_ansi(text)
         style = self._config.box_style
-        out.new_line()
-        out.write(style('┌' + ('─' * (len(stripped) + 2)) + '┐') +
+        self._context.out.new_line()
+        self._context.out.write(style('┌' + ('─' * (len(stripped) + 2)) + '┐') +
            '\n' + style('│ ')        + text +        style(' │') +
            '\n' + style('└' + ('─' * (len(stripped) + 2)) + '┘'))
 
@@ -225,13 +242,13 @@ class TerminalWriter(object):
     def msg(self, text):
         self._dotter.reset()
         self._eta.reset()
-        out.new_line()
-        out.write(self.line(text))
+        self._context.out.new_line()
+        self._context.out.write(self.line(text))
 
     def eta(self, text, seconds):
         self._dotter.reset()
         self._eta.reset()
-        out.new_line()
+        self._context.out.new_line()
         self._eta.start(self.line(text), seconds)
 
     def substeps(self, n):
@@ -244,7 +261,7 @@ class TerminalWriter(object):
         self._substeps.reset()
         self._dotter.reset()
         self._eta.reset()
-        out.new_line()
+        self._context.out.new_line()
 
 
 writer = TerminalWriter()
