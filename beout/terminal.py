@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 import logging
+import os
 import re
 import sys
 import threading
@@ -54,8 +55,8 @@ class NewLineManager(WithContext):
             self._are_we_on_new_line = False
             self._line += s
 
-    def new_line(self):
-        if not self._are_we_on_new_line:
+    def new_line(self, force=False):
+        if force or not self._are_we_on_new_line:
             self.context.fd.write('\n')
             self._are_we_on_new_line = True
             self._logger.info(strip_ansi(self._line))
@@ -211,26 +212,47 @@ class ScrollOutput(WithContext):
         self._lines = []
 
     @contextmanager
-    def start(self):
+    def start(self, clear_and_overwrite_after):
         self.context.out.new_line()
         yield self.add_line
+        if clear_and_overwrite_after:
+            for line in self._lines:
+                self.context.out.write(' ' * len(line))
+                self.context.out.new_line(force=True)
+            self._move_cursor_up(len(self._lines))
         self.context.out.new_line()
 
     def add_line(self, txt):
-        input_lines = txt.rstrip().split('\n')
-        new_lines = [line.rstrip() for line in self._lines + input_lines]
+        new_lines = self._lines + self._split_and_break_into_lines(txt)
         new_lines = new_lines[-self._line_count:]
         if len(self._lines) > 0:
-            self._cursor_up(len(self._lines))
+            self._move_cursor_up(len(self._lines))
         for i, line in enumerate(new_lines):
             if len(self._lines) > i:
                 self.context.out.write(' ' * len(self._lines[i]) + '\r')
             self.context.out.write(line)
-            self.context.out.new_line()
+            self.context.out.new_line(force=True)
         self._lines = new_lines
 
-    def _cursor_up(self, n):
-        sys.stdout.write('\033[%dA' % n)
+    def _split_and_break_into_lines(self, txt):
+        width = self._get_console_width()
+        lines = txt.rstrip().split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if len(line) > width:
+                lines[i] = line[width:]
+                lines.insert(i, line[:width])
+            i += 1
+        return lines
+
+    def _move_cursor_up(self, n):
+        self.context.fd.write('\033[%dA' % n)
+
+    def _get_console_width(self):
+        rows, columns = os.popen('stty size', 'r').read().split()
+        return int(columns)
+
 
 
 class TerminalWriter(object):
@@ -293,10 +315,10 @@ class TerminalWriter(object):
     def progress_dot_every_n_seconds(self, n):
         self._dotter.start(n)
 
-    def scroll_lines(self, n):
+    def scroll_lines(self, n, clear_and_overwrite_after=False):
         self.done()
         thing = ScrollOutput(n).with_context(self._context)
-        return thing.start()
+        return thing.start(clear_and_overwrite_after)
 
     def done(self):
         self._substeps.reset()
