@@ -214,19 +214,19 @@ class ScrollOutput(WithContext):
     @contextmanager
     def start(self, clear_and_overwrite_after):
         self.context.out.new_line()
-        yield self.add_line
+        yield self.write
         if clear_and_overwrite_after:
+            self._move_to_top()
             for line in self._lines:
-                self.context.out.write(' ' * len(line))
+                self.context.out.write('\r' + (' ' * len(line)))
                 self.context.out.new_line(force=True)
-            self._move_cursor_up(len(self._lines))
+            self._move_to_top()
         self.context.out.new_line()
 
-    def add_line(self, txt):
+    def write(self, txt):
         new_lines = self._lines + self._split_and_break_into_lines(txt)
         new_lines = new_lines[-self._line_count:]
-        if len(self._lines) > 0:
-            self._move_cursor_up(len(self._lines))
+        self._move_to_top()
         for i, line in enumerate(new_lines):
             if len(self._lines) > i:
                 self.context.out.write(' ' * len(self._lines[i]) + '\r')
@@ -236,7 +236,7 @@ class ScrollOutput(WithContext):
 
     def _split_and_break_into_lines(self, txt):
         width = self._get_console_width()
-        lines = txt.rstrip().split('\n')
+        lines = txt.split('\n')
         i = 0
         while i < len(lines):
             line = lines[i]
@@ -248,6 +248,10 @@ class ScrollOutput(WithContext):
 
     def _move_cursor_up(self, n):
         self.context.fd.write('\033[%dA' % n)
+
+    def _move_to_top(self):
+        if len(self._lines) > 0:
+            self._move_cursor_up(len(self._lines))
 
     def _get_console_width(self):
         rows, columns = os.popen('stty size', 'r').read().split()
