@@ -55,11 +55,12 @@ class NewLineManager(WithContext):
             self._are_we_on_new_line = False
             self._line += s
 
-    def new_line(self, force=False):
+    def new_line(self, force=False, skip_log=False):
         if force or not self._are_we_on_new_line:
             self.context.fd.write('\n')
             self._are_we_on_new_line = True
-            self._logger.info(strip_ansi(self._line))
+            if not skip_log:
+                self._logger.info(strip_ansi(self._line))
             self._line = ''
 
 
@@ -219,7 +220,7 @@ class ScrollOutput(WithContext):
             self._move_to_top()
             for line in self._lines:
                 self.context.out.write('\r' + (' ' * len(line)))
-                self.context.out.new_line(force=True)
+                self.context.out.new_line(force=True, skip_log=True)
             self._move_to_top()
         self.context.out.new_line()
 
@@ -231,7 +232,7 @@ class ScrollOutput(WithContext):
             if len(self._lines) > i:
                 self.context.out.write(' ' * len(self._lines[i]) + '\r')
             self.context.out.write(line)
-            self.context.out.new_line(force=True)
+            self.context.out.new_line(force=True, skip_log=True)
         self._lines = new_lines
 
     def _split_and_break_into_lines(self, txt):
