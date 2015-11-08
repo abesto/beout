@@ -1,12 +1,13 @@
 # coding=utf-8
 
+from contextlib import contextmanager
+from datetime import datetime
+from functools import partial
+import logging
 import re
 import sys
-from datetime import datetime
-import time
-from functools import partial
 import threading
-import logging
+import time
 
 from termcolor import colored, COLORS
 import humanize
@@ -203,6 +204,35 @@ class Eta(WithContext):
             self.thread = None
 
 
+class ScrollOutput(WithContext):
+    def __init__(self, line_count):
+        super(ScrollOutput, self).__init__()
+        self._line_count = line_count
+        self._lines = []
+
+    @contextmanager
+    def start(self):
+        self.context.out.new_line()
+        yield self.add_line
+        self.context.out.new_line()
+
+    def add_line(self, txt):
+        input_lines = txt.rstrip().split('\n')
+        new_lines = [line.rstrip() for line in self._lines + input_lines]
+        new_lines = new_lines[-self._line_count:]
+        if len(self._lines) > 0:
+            self._cursor_up(len(self._lines))
+        for i, line in enumerate(new_lines):
+            if len(self._lines) > i:
+                self.context.out.write(' ' * len(self._lines[i]) + '\r')
+            self.context.out.write(line)
+            self.context.out.new_line()
+        self._lines = new_lines
+
+    def _cursor_up(self, n):
+        sys.stdout.write('\033[%dA' % n)
+
+
 class TerminalWriter(object):
     """
     The public API
@@ -262,6 +292,11 @@ class TerminalWriter(object):
 
     def progress_dot_every_n_seconds(self, n):
         self._dotter.start(n)
+
+    def scroll_lines(self, n):
+        self.done()
+        thing = ScrollOutput(n).with_context(self._context)
+        return thing.start()
 
     def done(self):
         self._substeps.reset()

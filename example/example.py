@@ -15,8 +15,11 @@ project = blue_bold('presentationservice')
 writer.box(bold('Preparing for the installation of ') + project + bold(' on Docker LDE'))
 
 writer.msg('Updating LDE tools')
-writer.progress_dot_every_n_seconds(1)
-time.sleep(3)
+
+with writer.scroll_lines(3) as scroll:
+    for line in "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec a diam lectus. Sed sit amet ipsum mauris. Maecenas congue ligula ac quam viverra nec consectetur ante hendrerit. Donec et mollis dolor. Praesent et diam eget libero egestas mattis sit amet vitae augue. Nam tincidunt congue enim, ut porta lorem lacinia consectetur. Donec ut libero sed arcu vehicula ultricies a non tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean ut gravida lorem. Ut turpis felis, pulvinar a semper sed, adipiscing id dolor".split(". "):
+        time.sleep(1)
+        scroll(line)
 
 writer.msg('Checking out ' + project + ' from git')
 writer.progress_dot_every_n_seconds(1)
