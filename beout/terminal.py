@@ -28,6 +28,7 @@ class Context(object):
     def __init__(self):
         self.fd = None
         self.out = None
+        self.isatty = sys.stdin.isatty()
 
 
 class WithContext(object):
@@ -51,6 +52,8 @@ class NewLineManager(WithContext):
 
     def write(self, s):
         if len(s) > 0:
+            if not self.context.isatty:
+                s = strip_ansi(s)
             self.context.fd.write(s)
             self._are_we_on_new_line = False
             self._line += s
@@ -259,6 +262,14 @@ class ScrollOutput(WithContext):
         return int(columns)
 
 
+class DontScrollOutput(WithContext):
+    @contextmanager
+    def start(self, _):
+        yield self.write
+
+    def write(self, txt):
+        self.context.out.write(txt + '\n')
+
 
 class TerminalWriter(object):
     """
@@ -322,7 +333,11 @@ class TerminalWriter(object):
 
     def scroll_lines(self, n, clear_and_overwrite_after=False):
         self.done()
-        thing = ScrollOutput(n).with_context(self._context)
+        if self._context.isatty:
+            scroller = ScrollOutput(n)
+        else:
+            scroller = DontScrollOutput()
+        thing = scroller.with_context(self._context)
         return thing.start(clear_and_overwrite_after)
 
     def done(self):
