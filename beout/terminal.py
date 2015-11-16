@@ -271,6 +271,15 @@ class DontScrollOutput(WithContext):
         self.context.out.write(txt + '\n')
 
 
+class DevNullScroller(WithContext):
+    @contextmanager
+    def start(self, _):
+        yield self.write
+
+    def write(self, _):
+        pass
+
+
 class TerminalWriter(object):
     """
     The public API
@@ -333,10 +342,12 @@ class TerminalWriter(object):
 
     def scroll_lines(self, n, clear_and_overwrite_after=False):
         self.done()
-        if self._context.isatty:
-            scroller = ScrollOutput(n)
-        else:
+        if n == -1 or not self._context.isatty:
             scroller = DontScrollOutput()
+        elif n == 0:
+            scroller = DevNullScroller()
+        else:
+            scroller = ScrollOutput(n)
         thing = scroller.with_context(self._context)
         return thing.start(clear_and_overwrite_after)
 
