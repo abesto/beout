@@ -73,7 +73,7 @@ class TerminalWriterConfig(object):
     """
     box_style = partial(colored, color='magenta')
 
-    timestamp_format = '%H:%m:%S'
+    timestamp_format = '%H:%M:%S'
     timestamp_bracket_style = partial(colored, color='white')
     timestamp_style = partial(colored, color='grey')
 
